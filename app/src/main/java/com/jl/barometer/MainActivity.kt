@@ -6,22 +6,27 @@ import android.hardware.Sensor
 import android.hardware.SensorManager
 import android.os.Bundle
 import android.view.View
+import com.amitshekhar.DebugDB
 import com.github.mikephil.charting.charts.LineChart
 import com.github.pwittchen.reactivesensors.library.ReactiveSensorFilter
 import com.github.pwittchen.reactivesensors.library.ReactiveSensors
+import com.jl.barometer.data.BarometerDataContract
 import com.jl.barometer.data.BarometerReading
+import com.jl.barometer.data.impl.BarometerDataFactoryRoom
 import com.jl.barometer.plot.IPlot
 import com.jl.barometer.plot.presenter.Presenter
 import com.jl.barometer.plot.view.AndroidChart
+import com.jl.barometer.rxsensor.SensorReadContract
+import com.jl.barometer.rxsensor.SensorReadFactory
 import com.jl.barometer.sensor.BarometerSensorListener
 import io.reactivex.Flowable
 import io.reactivex.Observable
+import io.reactivex.disposables.Disposable
 import io.reactivex.schedulers.Schedulers
 import java.util.stream.Collectors
 
 
 class MainActivity : Activity(), IPlot.View {
-
     lateinit var presenter: IPlot.Presenter
     lateinit var graphViewPlot : IPlot.View
 
@@ -29,10 +34,11 @@ class MainActivity : Activity(), IPlot.View {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-
         initChart()
 
-        scheduleBarReadings(registerBarometer2())
+        //scheduleBarReadings(registerBarometer2())
+        ScheduleReadPlot(this.applicationContext)
+                .doPlot(graphViewPlot)
 
     }
 
@@ -68,12 +74,20 @@ class MainActivity : Activity(), IPlot.View {
                 .map { BarometerReading(it) }
     }
 
+    fun registerBarometer3() : BarometerDataContract {
+       return BarometerDataFactoryRoom().getContract(this.applicationContext)
+    }
+
     fun scheduleBarReadings(reading: Flowable<BarometerReading>) {
         plotData(reading.subscribeOn(Schedulers.io()))
     }
 
     fun doPlot() {
         plotData(presenter.getData())
+    }
+
+    override fun plotData(data: List<BarometerReading>) {
+        graphViewPlot.plotData(data)
     }
 
     override fun plotData(data: Observable<BarometerReading>) {
@@ -85,3 +99,58 @@ class MainActivity : Activity(), IPlot.View {
     }
 
 }
+
+private class ScheduleReadPlot(val context: Context) {
+
+    fun doPlot(graphViewPlot : IPlot.View) {
+        DebugDB.getAddressLog()
+        val dataContract = getDataContract()
+        val sensorContract = getReadingContract()
+        subscribePlot(dataContract, graphViewPlot)
+        startSensorReadThread(sensorContract, dataContract)
+    }
+
+    private fun getDataContract() : BarometerDataContract {
+        return BarometerDataFactoryRoom().getContract(context)
+    }
+
+    private fun getReadingContract() : SensorReadContract {
+        return SensorReadFactory().getContract(context)
+    }
+
+    private fun subscribePlot(dataContract: BarometerDataContract,
+                              graphViewPlot : IPlot.View) : Disposable {
+        return dataContract.getAllData()
+                .subscribeOn(Schedulers.io())
+                .subscribe {
+                    //it.forEach { println(it) }
+                    graphViewPlot.plotData(it) }
+    }
+
+    private fun startSensorReadThread(sensorContract: SensorReadContract,
+            dataContract: BarometerDataContract) {
+        Thread(Runnable {
+            while (true) {
+                getSensorReadDisposable(sensorContract, dataContract)
+                Thread.sleep(1000 * 5 * 1)
+            }
+        }).start()
+    }
+
+    private fun getSensorReadDisposable(sensorContract : SensorReadContract,
+                                        dataContract: BarometerDataContract) {
+        val data = sensorContract.getPressureReading()
+                .subscribeOn(Schedulers.computation())
+                .observeOn(Schedulers.io())
+                .blockingFirst()
+        println("Data: $data")
+        dataContract.addReading(data)
+    }
+
+
+
+
+
+}
+
+

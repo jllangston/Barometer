@@ -8,18 +8,24 @@ import com.jl.barometer.data.BarometerReading
 import com.jl.barometer.plot.IPlot
 import io.reactivex.Flowable
 import io.reactivex.Observable
-import java.sql.Timestamp
+import io.reactivex.schedulers.Schedulers
 import java.util.*
 
 /**
  * Created by jl on 1/28/18.
+ *
+ * Plots data
  */
 class AndroidChart(private val lineChart: LineChart): IPlot.View {
 
     val entries = ArrayList<Entry>()
 
     override fun plotData(data: Flowable<BarometerReading>) {
-        data.subscribe { doPlot(it) }
+        data.subscribeOn(Schedulers.io()).subscribe { doPlot(it) }
+    }
+
+    override fun plotData(data: List<BarometerReading>) {
+        data.forEach { doPlot(it) }
     }
 
     override fun plotData(data: Observable<BarometerReading>) {

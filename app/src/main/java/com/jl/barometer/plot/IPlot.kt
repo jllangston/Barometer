@@ -7,6 +7,8 @@ import io.reactivex.Observable
 
 /**
  * Created by jl on 1/14/18.
+ *
+ * Plot interface
  */
 
 interface IPlot {
@@ -14,6 +16,7 @@ interface IPlot {
     interface View {
         fun plotData(data: Flowable<BarometerReading>)
         fun plotData(data: Observable<BarometerReading>)
+        fun plotData(data: List<BarometerReading>)
     }
 
     interface Presenter {
