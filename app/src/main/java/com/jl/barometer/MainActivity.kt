@@ -2,6 +2,7 @@ package com.jl.barometer
 
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.hardware.Sensor
 import android.hardware.SensorManager
 import android.os.Bundle
@@ -19,6 +20,7 @@ import com.jl.barometer.plot.view.AndroidChart
 import com.jl.barometer.rxsensor.SensorReadContract
 import com.jl.barometer.rxsensor.SensorReadFactory
 import com.jl.barometer.sensor.BarometerSensorListener
+import com.jl.barometer.service.GetReadingService
 import io.reactivex.Flowable
 import io.reactivex.Observable
 import io.reactivex.disposables.Disposable
@@ -37,13 +39,16 @@ class MainActivity : Activity(), IPlot.View {
         initChart()
 
         //scheduleBarReadings(registerBarometer2())
-        ScheduleReadPlot(this.applicationContext)
-                .doPlot(graphViewPlot)
+//        ScheduleReadPlot(this.applicationContext)
+//                .doPlot(graphViewPlot)
+        ServiceUpdate().doPlot(graphViewPlot, this.applicationContext)
 
     }
 
     fun initChart() {
         val graph = findViewById<View>(R.id.graph) as LineChart
+        graph.clear()
+        graph.invalidate()
         val yAxis = graph.axisLeft
         yAxis.axisMaximum = 1024f
         yAxis.axisMinimum = 950f
@@ -147,10 +152,36 @@ private class ScheduleReadPlot(val context: Context) {
         dataContract.addReading(data)
     }
 
-
-
-
-
 }
+
+class ServiceUpdate {
+
+    fun doPlot(graphViewPlot : IPlot.View, context: Context) {
+        DebugDB.getAddressLog()
+        val dataContract = BarometerDataFactoryRoom().getContract(context)
+        subscribePlot(dataContract, graphViewPlot)
+        startSensorReadThread(context)
+    }
+
+    private fun subscribePlot(dataContract: BarometerDataContract,
+                              graphViewPlot : IPlot.View) : Disposable {
+        return dataContract.getAllData()
+                .subscribeOn(Schedulers.io())
+                .subscribe {
+                    //it.forEach { println(it) }
+                    graphViewPlot.plotData(it) }
+    }
+
+    private fun startSensorReadThread(context: Context) {
+        Thread(Runnable {
+            while (true) {
+                val intent = Intent(context, GetReadingService::class.java)
+                context.startService(intent)
+                Thread.sleep(1000 * 60 * 30)
+            }
+        }).start()
+    }
+}
+
 
 
